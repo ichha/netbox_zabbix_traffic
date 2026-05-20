@@ -1,144 +1,3 @@
-(function () {
-  function formatBps(value) {
-    if (value === null || value === undefined) {
-      return "-";
-    }
-    const units = ["bps", "Kbps", "Mbps", "Gbps", "Tbps"];
-    let number = Number(value);
-    let index = 0;
-    while (Math.abs(number) >= 1000 && index < units.length - 1) {
-      number /= 1000;
-      index += 1;
-    }
-    return index === 0 ? `${Math.round(number)} ${units[index]}` : `${number.toFixed(2)} ${units[index]}`;
-  }
-
-  function normalizePoints(points) {
-    return points
-      .filter((point) => point.clock && point.value !== null && point.value !== undefined)
-      .map((point) => ({
-        x: Number(point.clock) * 1000,
-        y: Number(point.value),
-      }));
-  }
-
-  function niceMax(value) {
-    if (value <= 0) {
-      return 1;
-    }
-    const exponent = Math.floor(Math.log10(value));
-    const fraction = value / Math.pow(10, exponent);
-    const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
-    return niceFraction * Math.pow(10, exponent);
-  }
-
-  function drawGraph(canvas, payload) {
-    const ctx = canvas.getContext("2d");
-    const width = canvas.parentElement.clientWidth || canvas.clientWidth || 1200;
-    const height = Number(canvas.getAttribute("height")) || 360;
-    const scale = window.devicePixelRatio || 1;
-
-    canvas.width = width * scale;
-    canvas.height = height * scale;
-    ctx.scale(scale, scale);
-    ctx.clearRect(0, 0, width, height);
-
-    const inPoints = normalizePoints(payload.in || []);
-    const outPoints = normalizePoints(payload.out || []);
-    const points = inPoints.concat(outPoints);
-    const padding = { top: 28, right: 28, bottom: 52, left: 78 };
-
-    ctx.font = "12px sans-serif";
-    ctx.lineWidth = 1;
-
-    if (!points.length) {
-      drawAxes(ctx, width, height, padding);
-      ctx.fillStyle = "#6c757d";
-      ctx.fillText("No Zabbix history returned for this interface.", padding.left + 12, height / 2);
-      return;
-    }
-
-    const now = Date.now();
-    const hours = Number(payload.hours || 24);
-    const minX = now - hours * 3600 * 1000;
-    const maxX = now;
-    const maxY = niceMax(Math.max(...points.map((point) => point.y), 1));
-    const plotWidth = width - padding.left - padding.right;
-    const plotHeight = height - padding.top - padding.bottom;
-
-    function x(pointOrTime) {
-      const value = typeof pointOrTime === "number" ? pointOrTime : pointOrTime.x;
-      return padding.left + ((value - minX) / Math.max(maxX - minX, 1)) * plotWidth;
-    }
-
-    function y(pointOrValue) {
-      const value = typeof pointOrValue === "number" ? pointOrValue : pointOrValue.y;
-      return height - padding.bottom - (value / maxY) * plotHeight;
-    }
-
-    drawGrid(ctx, width, height, padding, maxY, minX, maxX, x, y);
-    drawLine(ctx, inPoints, x, y, "#0d6efd");
-    drawLine(ctx, outPoints, x, y, "#198754");
-    drawLegend(ctx, padding);
-  }
-
-  function drawAxes(ctx, width, height, padding) {
-    ctx.strokeStyle = "#d0d7de";
-    ctx.beginPath();
-    ctx.moveTo(padding.left, padding.top);
-    ctx.lineTo(padding.left, height - padding.bottom);
-    ctx.lineTo(width - padding.right, height - padding.bottom);
-    ctx.stroke();
-  }
-
-  function drawGrid(ctx, width, height, padding, maxY, minX, maxX, x, y) {
-    drawAxes(ctx, width, height, padding);
-
-    const yTicks = 5;
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-    for (let index = 0; index <= yTicks; index += 1) {
-      const value = (maxY / yTicks) * index;
-      const yy = y(value);
-      ctx.strokeStyle = index === 0 ? "#c8ced3" : "#e9ecef";
-      ctx.beginPath();
-      ctx.moveTo(padding.left, yy);
-      ctx.lineTo(width - padding.right, yy);
-      ctx.stroke();
-      ctx.fillStyle = "#495057";
-      ctx.fillText(formatBps(value), padding.left - 10, yy);
-    }
-
-    const xTicks = 6;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    for (let index = 0; index <= xTicks; index += 1) {
-      const value = minX + ((maxX - minX) / xTicks) * index;
-      const xx = x(value);
-      ctx.strokeStyle = "#f1f3f5";
-      ctx.beginPath();
-      ctx.moveTo(xx, padding.top);
-      ctx.lineTo(xx, height - padding.bottom);
-      ctx.stroke();
-      ctx.fillStyle = "#495057";
-      ctx.fillText(formatTime(value), xx, height - padding.bottom + 12);
-    }
-  }
-
-  function drawLine(ctx, series, x, y, color) {
-    const visible = series.filter((point) => x(point) >= 0);
-    if (!visible.length) {
-      return;
-    }
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    visible.forEach((point, index) => {
-      if (index === 0) {
-        ctx.moveTo(x(point), y(point));
-      } else {
-        ctx.lineTo(x(point), y(point));
-      }
     });
     ctx.stroke();
   }
@@ -152,10 +11,118 @@
     ctx.fillText("OUT", padding.left + 54, padding.top - 12);
   }
 
+  function drawTooltip(ctx, width, height, padding, hoverTime, inPoints, outPoints, x, y, minX, maxX) {
+    const clampedTime = Math.min(Math.max(hoverTime, minX), maxX);
+    const xx = x(clampedTime);
+    const inPoint = nearestPoint(inPoints, clampedTime);
+    const outPoint = nearestPoint(outPoints, clampedTime);
+    const tooltipTime = inPoint?.x || outPoint?.x || clampedTime;
+
+    ctx.strokeStyle = "#6c757d";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(xx, padding.top);
+    ctx.lineTo(xx, height - padding.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    drawPoint(ctx, inPoint, x, y, "#0d6efd");
+    drawPoint(ctx, outPoint, x, y, "#198754");
+
+    const lines = [
+      formatDateTime(tooltipTime),
+      `IN  ${formatBps(inPoint?.y)}`,
+      `OUT ${formatBps(outPoint?.y)}`,
+    ];
+    const boxWidth = 190;
+    const boxHeight = 68;
+    const boxX = xx + boxWidth + 14 > width ? xx - boxWidth - 14 : xx + 14;
+    const boxY = Math.max(padding.top + 4, Math.min(height - padding.bottom - boxHeight - 4, padding.top + 10));
+
+    ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+    ctx.strokeStyle = "#adb5bd";
+    ctx.lineWidth = 1;
+    roundRect(ctx, boxX, boxY, boxWidth, boxHeight, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#212529";
+    ctx.fillText(lines[0], boxX + 10, boxY + 9);
+    ctx.fillStyle = "#0d6efd";
+    ctx.fillText(lines[1], boxX + 10, boxY + 29);
+    ctx.fillStyle = "#198754";
+    ctx.fillText(lines[2], boxX + 10, boxY + 49);
+  }
+
+  function nearestPoint(points, timestamp) {
+    if (!points.length) {
+      return null;
+    }
+    return points.reduce((best, point) => {
+      return Math.abs(point.x - timestamp) < Math.abs(best.x - timestamp) ? point : best;
+    }, points[0]);
+  }
+
+  function drawPoint(ctx, point, x, y, color) {
+    if (!point) {
+      return;
+    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x(point), y(point), 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function roundRect(ctx, x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+  }
+
   function formatTime(timestamp) {
     return new Date(timestamp).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
+    });
+  }
+
+  function formatDateTime(timestamp) {
+    return new Date(timestamp).toLocaleString([], {
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  function attachHover(canvas, payload) {
+    canvas.addEventListener("mousemove", (event) => {
+      const state = chartState.get(canvas);
+      if (!state || !state.plotWidth) {
+        return;
+      }
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const relativeX = Math.min(Math.max(mouseX - state.padding.left, 0), state.plotWidth);
+      const hoverTime = state.minX + (relativeX / state.plotWidth) * (state.maxX - state.minX);
+      drawGraph(canvas, payload, hoverTime);
+    });
+
+    canvas.addEventListener("mouseleave", () => {
+      drawGraph(canvas, payload);
     });
   }
 
@@ -171,6 +138,7 @@
       }
       const payload = await response.json();
       drawGraph(canvas, payload);
+      attachHover(canvas, payload);
       const inText = payload.in_item ? payload.in_item.name : "inbound item not found";
       const outText = payload.out_item ? payload.out_item.name : "outbound item not found";
       status.textContent = `${payload.device}: ${inText} / ${outText}`;
