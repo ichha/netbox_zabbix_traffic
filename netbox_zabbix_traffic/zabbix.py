@@ -185,6 +185,9 @@ class ZabbixClient:
 
         self.login()
 
+        # IMPORTANT:
+        # Get ALL items from host
+        # Do NOT filter using search=name
         items = self.call(
             "item.get",
             {
@@ -198,14 +201,8 @@ class ZabbixClient:
                     "lastclock",
                 ],
 
-                # IMPORTANT
                 "selectTags": "extend",
 
-                "search": {
-                    "name": interface_search
-                },
-
-                "searchByAny": True,
                 "sortfield": "name",
             },
         )
@@ -225,11 +222,13 @@ class ZabbixClient:
 
             item_name = (
                 item.get("name", "")
+                .strip()
                 .lower()
             )
 
             item_key = (
                 item.get("key_", "")
+                .strip()
                 .lower()
             )
 
@@ -241,9 +240,9 @@ class ZabbixClient:
 
             matched = False
 
-            # -----------------------------
-            # TAG MATCHING
-            # -----------------------------
+            # --------------------------------
+            # MATCH USING TAGS
+            # --------------------------------
 
             for tag in tags:
 
@@ -259,23 +258,23 @@ class ZabbixClient:
                     .lower()
                 )
 
-                # Match interface tag
+                # interface tag
                 if (
                     tag_name == "interface"
                     and tag_value == interface_search_lower
                 ):
                     matched = True
 
-                # Match description tag
+                # description tag
                 elif (
                     tag_name == "description"
                     and tag_value == interface_search_lower
                 ):
                     matched = True
 
-            # -----------------------------
-            # FALLBACK MATCH
-            # -----------------------------
+            # --------------------------------
+            # FALLBACK NAME MATCH
+            # --------------------------------
 
             if not matched:
 
@@ -285,9 +284,9 @@ class ZabbixClient:
             if not matched:
                 continue
 
-            # -----------------------------
-            # DIRECTION MATCH
-            # -----------------------------
+            # --------------------------------
+            # MATCH RX/TX DIRECTION
+            # --------------------------------
 
             if any(
                 term in haystack
