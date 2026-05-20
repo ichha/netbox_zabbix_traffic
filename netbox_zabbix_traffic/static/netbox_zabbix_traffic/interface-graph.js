@@ -54,12 +54,14 @@
 
     const scale = window.devicePixelRatio || 1;
 
-    canvas.width = width * scale;
-    canvas.height = height * scale;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    ctx.scale(scale, scale);
+  canvas.width = width * scale;
+  canvas.height = height * scale;
 
-    ctx.clearRect(0, 0, width, height);
+  // Apply scale once
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
+  ctx.clearRect(0, 0, width, height);
 
     const inPoints = normalizePoints(payload.in || []);
     const outPoints = normalizePoints(payload.out || []);
