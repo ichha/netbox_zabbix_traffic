@@ -116,24 +116,126 @@ class ZabbixClient:
         )
         return _item_to_value(items[0]) if items else None
 
-    def find_interface_item(self, host_id, interface_search, direction_terms):
-        self.login()
-        items = self.call(
-            "item.get",
-            {
-                "hostids": host_id,
-                "output": ["itemid", "name", "key_", "lastvalue", "lastclock"],
-                "search": {"name": interface_search},
-                "searchByAny": True,
-                "sortfield": "name",
+   def find_interface_item(
+    self,
+    host_id,
+    interface_search,
+    direction_terms,
+):
+
+    self.login()
+
+    items = self.call(
+        "item.get",
+        {
+            "hostids": host_id,
+            "output": [
+                "itemid",
+                "name",
+                "key_",
+                "lastvalue",
+                "lastclock",
+            ],
+
+            # IMPORTANT
+            "selectTags": "extend",
+
+            "search": {
+                "name": interface_search
             },
+
+            "searchByAny": True,
+            "sortfield": "name",
+        },
+    )
+
+    direction_terms = [
+        term.lower()
+        for term in direction_terms
+    ]
+
+    interface_search_lower = (
+        interface_search
+        .strip()
+        .lower()
+    )
+
+    for item in items:
+
+        item_name = (
+            item.get("name", "")
+            .lower()
         )
-        direction_terms = [term.lower() for term in direction_terms]
-        for item in items:
-            haystack = f"{item.get('name', '')} {item.get('key_', '')}".lower()
-            if any(term in haystack for term in direction_terms):
-                return _item_to_value(item)
-        return None
+
+        item_key = (
+            item.get("key_", "")
+            .lower()
+        )
+
+        haystack = (
+            f"{item_name} {item_key}"
+        )
+
+        tags = item.get("tags", [])
+
+        matched = False
+
+        # -----------------------------------
+        # TAG MATCHING
+        # -----------------------------------
+
+        for tag in tags:
+
+            tag_name = (
+                tag.get("tag", "")
+                .strip()
+                .lower()
+            )
+
+            tag_value = (
+                tag.get("value", "")
+                .strip()
+                .lower()
+            )
+
+            # Match interface tag
+            if (
+                tag_name == "interface"
+                and tag_value == interface_search_lower
+            ):
+                matched = True
+
+            # Match description tag
+            elif (
+                tag_name == "description"
+                and tag_value == interface_search_lower
+            ):
+                matched = True
+
+        # -----------------------------------
+        # FALLBACK MATCH
+        # -----------------------------------
+
+        if not matched:
+
+            if interface_search_lower in haystack:
+                matched = True
+
+        if not matched:
+            continue
+
+        # -----------------------------------
+        # DIRECTION MATCH
+        # -----------------------------------
+
+        if any(
+            term in haystack
+            for term in direction_terms
+        ):
+
+            return _item_to_value(item)
+
+    return None
 
     def get_history(self, item_id, history_type=3, time_from=None, limit=240):
         self.login()
