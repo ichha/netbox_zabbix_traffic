@@ -1,0 +1,2 @@
+recursive-include netbox_zabbix_traffic/templates *.html
+recursive-include netbox_zabbix_traffic/static *

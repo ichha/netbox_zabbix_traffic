@@ -1,0 +1,8 @@
+netbox_topology_views
+netbox_ipcalculator
+https://github.com/netbox-community/netbox-floorplan-plugin.git
+
+# After uploading this plugin to GitHub/GitLab, replace the URL below.
+# Example:
+# git+https://github.com/YOUR-ORG/netbox-zabbix-traffic.git
+git+https://github.com/YOUR-ORG/netbox-zabbix-traffic.git
